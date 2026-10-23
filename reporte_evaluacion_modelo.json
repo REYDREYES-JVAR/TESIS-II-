@@ -1,0 +1,50 @@
+{
+    "metrics": {
+        "Accuracy": 0.9268,
+        "Precision": 1.0,
+        "Recall": 0.8235,
+        "F1_Score": 0.9032,
+        "AUC_ROC": 0.9926,
+        "CV_Accuracy_Mean": 0.9,
+        "CV_Recall_Mean": 0.8952,
+        "CV_F1_Mean": 0.8867
+    },
+    "feature_importances": [
+        {
+            "Variable": "Rendimiento Previo",
+            "Importancia": 0.3923
+        },
+        {
+            "Variable": "Evaluación Diagnóstica",
+            "Importancia": 0.2962
+        },
+        {
+            "Variable": "Cumplimiento Tareas (%)",
+            "Importancia": 0.1174
+        },
+        {
+            "Variable": "Participación Académica",
+            "Importancia": 0.0899
+        },
+        {
+            "Variable": "Asistencia (%)",
+            "Importancia": 0.0628
+        },
+        {
+            "Variable": "Edad",
+            "Importancia": 0.0152
+        },
+        {
+            "Variable": "Acompañamiento Familiar",
+            "Importancia": 0.0114
+        },
+        {
+            "Variable": "Sexo",
+            "Importancia": 0.0098
+        },
+        {
+            "Variable": "Grado",
+            "Importancia": 0.005
+        }
+    ]
+}

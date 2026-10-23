@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard Predictivo de Rendimiento Académico - Random Forest</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --border-color: #e2e8f0;
+      --primary: #1e3a8a;
+      --primary-light: #3b82f6;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+    }
+    body {
+      background-color: var(--background, var(--bg));
+      color: var(--foreground, var(--text-main));
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+    .custom-card {
+      background-color: var(--card, var(--card-bg));
+      border: 1px solid var(--border, var(--border-color));
+      border-radius: 0.875rem;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
+    }
+    .tab-btn.active {
+      border-bottom: 2px solid #2563eb;
+      color: #2563eb;
+      font-weight: 600;
+    }
+    .progress-bar-fill {
+      transition: width 0.4s ease-in-out;
+    }
+  </style>
+</head>
+<body class="min-h-screen p-4 md:p-6 antialiased">
+
+  <!-- Encabezado Institucional -->
+  <header class="custom-card p-5 mb-6 bg-gradient-to-r from-blue-900 to-indigo-900 text-white border-0 shadow-md">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div>
+        <div class="flex items-center gap-2 mb-1">
+          <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/30 text-blue-100 border border-blue-400/30">
+            Universidad César Vallejo • Maestría en IA 2026
+          </span>
+          <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/30 text-emerald-200 border border-emerald-400/30">
+            CRISP-DM • Random Forest
+          </span>
+        </div>
+        <h1 class="text-xl md:text-2xl font-bold tracking-tight text-white">
+          Machine Learning para predecir el rendimiento académico y priorizar el refuerzo escolar en estudiantes de primaria
+        </h1>
+        <p class="text-xs md:text-sm text-blue-200 mt-1 max-w-3xl">
+          Apoyo a la toma de decisiones pedagógicas y refuerzo escolar en estudiantes de primaria (UGEL 04 / IE 3085 Pedro Vilca Apaza)
+        </p>
+      </div>
+      <div class="text-left md:text-right text-xs text-blue-200 border-t md:border-t-0 md:border-l border-blue-700/50 pt-2 md:pt-0 md:pl-4">
+        <p><strong class="text-white">Autores:</strong> J. Vidal Arbieto R. & K. Bances R.</p>
+        <p><strong class="text-white">Asesor:</strong> Dr. Ruben Quispe Llacctarimay</p>
+        <p class="mt-1 text-blue-300 font-mono">Población Censal: N = 202 estudiantes</p>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navegación por Pestañas -->
+  <div class="flex border-b border-gray-200 dark:border-gray-700 mb-6 gap-6 text-sm overflow-x-auto">
+    <button onclick="switchTab('resumen')" id="tab-btn-resumen" class="tab-btn active pb-3 px-1 font-medium transition-colors">
+      📊 Resumen Ejecutivo y Métricas
+    </button>
+    <button onclick="switchTab('estudiantes')" id="tab-btn-estudiantes" class="tab-btn pb-3 px-1 font-medium text-gray-500 hover:text-gray-700 transition-colors">
+      👥 Alumnado y Alertas Tempranas (202)
+    </button>
+    <button onclick="switchTab('importancia')" id="tab-btn-importancia" class="tab-btn pb-3 px-1 font-medium text-gray-500 hover:text-gray-700 transition-colors">
+      🔍 Factores Clave (Feature Importance)
+    </button>
+    <button onclick="switchTab('simulador')" id="tab-btn-simulador" class="tab-btn pb-3 px-1 font-medium text-gray-500 hover:text-gray-700 transition-colors">
+      ⚡ Simulador Predictivo en Vivo
+    </button>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- TAB 1: RESUMEN EJECUTIVO Y MÉTRICAS -->
+  <!-- ========================================== -->
+  <div id="tab-resumen" class="space-y-6">
+    <!-- Fila de Tarjetas KPI -->
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div class="custom-card p-4">
+        <p class="text-xs text-gray-500 font-medium">Población Total</p>
+        <h3 class="text-2xl font-bold mt-1 text-gray-900" id="kpi-total">202</h3>
+        <p class="text-xs text-gray-500 mt-1">4to: 104 | 6to: 98</p>
+      </div>
+      <div class="custom-card p-4 border-l-4 border-l-red-500">
+        <p class="text-xs text-red-600 font-medium">Riesgo Crítico</p>
+        <h3 class="text-2xl font-bold mt-1 text-red-600" id="kpi-critico">75</h3>
+        <p class="text-xs text-red-500 mt-1">P(Y=1) ≥ 0.75 (37.1%)</p>
+      </div>
+      <div class="custom-card p-4 border-l-4 border-l-amber-500">
+        <p class="text-xs text-amber-600 font-medium">Riesgo Moderado</p>
+        <h3 class="text-2xl font-bold mt-1 text-amber-600" id="kpi-moderado">7</h3>
+        <p class="text-xs text-amber-500 mt-1">0.40 ≤ P &lt; 0.75 (3.5%)</p>
+      </div>
+      <div class="custom-card p-4 border-l-4 border-l-emerald-500">
+        <p class="text-xs text-emerald-600 font-medium">Sin Riesgo</p>
+        <h3 class="text-2xl font-bold mt-1 text-emerald-600" id="kpi-sinriesgo">120</h3>
+        <p class="text-xs text-emerald-500 mt-1">P &lt; 0.40 (59.4%)</p>
+      </div>
+      <div class="custom-card p-4 bg-blue-50 border-blue-200">
+        <p class="text-xs text-blue-700 font-medium">Accuracy RF</p>
+        <h3 class="text-2xl font-bold mt-1 text-blue-800">92.68%</h3>
+        <p class="text-xs text-blue-600 mt-1">10-Fold CV: 90.0%</p>
+      </div>
+      <div class="custom-card p-4 bg-indigo-50 border-indigo-200">
+        <p class="text-xs text-indigo-700 font-medium">Sensibilidad (Recall)</p>
+        <h3 class="text-2xl font-bold mt-1 text-indigo-800">82.35%</h3>
+        <p class="text-xs text-indigo-600 mt-1">CV Prom: 89.52%</p>
+      </div>
+    </div>
+
+    <!-- Gráficos de Distribución y Métricas -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Distribución de Riesgo (SVG Donut) -->
+      <div class="custom-card p-5">
+        <h3 class="text-sm font-semibold text-gray-800 mb-1">Distribución del Riesgo Académico</h3>
+        <p class="text-xs text-gray-500 mb-4">Clasificación según umbrales pedagógicos (Anexo 6)</p>
+        <div class="flex items-center justify-center relative">
+          <svg viewBox="0 0 100 100" class="w-48 h-48 transform -rotate-90">
+            <!-- Sin Riesgo (120/202 = 59.4% -> stroke-dasharray: 59.4 100) -->
+            <circle cx="50" cy="50" r="38" fill="transparent" stroke="#10b981" stroke-width="16" stroke-dasharray="141.9 238.7" stroke-dashoffset="0"></circle>
+            <!-- Riesgo Crítico (75/202 = 37.1% -> 88.6) -->
+            <circle cx="50" cy="50" r="38" fill="transparent" stroke="#ef4444" stroke-width="16" stroke-dasharray="88.6 238.7" stroke-dashoffset="-141.9"></circle>
+            <!-- Riesgo Moderado (7/202 = 3.5% -> 8.2) -->
+            <circle cx="50" cy="50" r="38" fill="transparent" stroke="#f59e0b" stroke-width="16" stroke-dasharray="8.2 238.7" stroke-dashoffset="-230.5"></circle>
+          </svg>
+          <div class="absolute inset-0 flex flex-col items-center justify-center text-center">
+            <span class="text-2xl font-bold text-gray-800">202</span>
+            <span class="text-xs text-gray-500">Estudiantes</span>
+          </div>
+        </div>
+        <div class="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-gray-100 text-center text-xs">
+          <div>
+            <div class="w-3 h-3 bg-emerald-500 rounded-full mx-auto mb-1"></div>
+            <p class="font-bold text-gray-800">120 (59.4%)</p>
+            <p class="text-gray-500">Sin Riesgo</p>
+          </div>
+          <div>
+            <div class="w-3 h-3 bg-amber-500 rounded-full mx-auto mb-1"></div>
+            <p class="font-bold text-gray-800">7 (3.5%)</p>
+            <p class="text-gray-500">Moderado</p>
+          </div>
+          <div>
+            <div class="w-3 h-3 bg-red-500 rounded-full mx-auto mb-1"></div>
+            <p class="font-bold text-gray-800">75 (37.1%)</p>
+            <p class="text-gray-500">Crítico</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Desglose por Grado Escolar -->
+      <div class="custom-card p-5">
+        <h3 class="text-sm font-semibold text-gray-800 mb-1">Riesgo Académico por Grado</h3>
+        <p class="text-xs text-gray-500 mb-4">Comparativo entre 4to y 6to de primaria</p>
+        <div class="space-y-4 text-xs">
+          <div>
+            <div class="flex justify-between font-semibold mb-1">
+              <span>4to Grado (N = 104)</span>
+              <span class="text-red-600 font-bold">38 en Refuerzo (36.5%)</span>
+            </div>
+            <div class="w-full bg-gray-100 rounded-full h-4 flex overflow-hidden">
+              <div style="width: 63.5%" class="bg-emerald-500 flex items-center justify-center text-[10px] text-white font-bold" title="Sin Riesgo: 66">66</div>
+              <div style="width: 3.8%" class="bg-amber-500" title="Riesgo Moderado: 4"></div>
+              <div style="width: 32.7%" class="bg-red-500 flex items-center justify-center text-[10px] text-white font-bold" title="Riesgo Crítico: 34">34</div>
+            </div>
+            <div class="flex justify-between text-gray-500 text-[11px] mt-1">
+              <span>Sin Riesgo: 66</span>
+              <span>Mod: 4 | Crítico: 34</span>
+            </div>
+          </div>
+
+          <div class="pt-2">
+            <div class="flex justify-between font-semibold mb-1">
+              <span>6to Grado (N = 98)</span>
+              <span class="text-red-600 font-bold">44 en Refuerzo (44.9%)</span>
+            </div>
+            <div class="w-full bg-gray-100 rounded-full h-4 flex overflow-hidden">
+              <div style="width: 55.1%" class="bg-emerald-500 flex items-center justify-center text-[10px] text-white font-bold" title="Sin Riesgo: 54">54</div>
+              <div style="width: 3.1%" class="bg-amber-500" title="Riesgo Moderado: 3"></div>
+              <div style="width: 41.8%" class="bg-red-500 flex items-center justify-center text-[10px] text-white font-bold" title="Riesgo Crítico: 41">41</div>
+            </div>
+            <div class="flex justify-between text-gray-500 text-[11px] mt-1">
+              <span>Sin Riesgo: 54</span>
+              <span>Mod: 3 | Crítico: 41</span>
+            </div>
+          </div>
+
+          <div class="p-3 bg-blue-50/70 rounded-lg text-blue-900 border border-blue-100 mt-2">
+            <p class="font-semibold text-xs mb-1">💡 Hallazgo Relevante:</p>
+            <p class="text-[11px] text-blue-800 leading-relaxed">
+              El 6to grado presenta una mayor concentración de riesgo crítico (41.8% vs 32.7%), consistente con la transición escolar hacia la secundaria y el aumento de exigencia en competencias matemáticas y de comprensión lectora.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rendimiento del Modelo Random Forest -->
+      <div class="custom-card p-5">
+        <h3 class="text-sm font-semibold text-gray-800 mb-1">Métricas de Validación (Scikit-Learn)</h3>
+        <p class="text-xs text-gray-500 mb-4">Evaluación en conjunto de prueba independiente (20%)</p>
+        <div class="space-y-3 text-xs">
+          <div>
+            <div class="flex justify-between mb-1">
+              <span class="text-gray-600 font-medium">Exactitud Global (Accuracy)</span>
+              <span class="font-bold text-gray-900">92.68%</span>
+            </div>
+            <div class="w-full bg-gray-100 rounded-full h-2">
+              <div class="bg-blue-600 h-2 rounded-full" style="width: 92.68%"></div>
+            </div>
+          </div>
+          <div>
+            <div class="flex justify-between mb-1">
+              <span class="text-gray-600 font-medium">Precisión (Positive Predictive Value)</span>
+              <span class="font-bold text-gray-900">100.00%</span>
+            </div>
+            <div class="w-full bg-gray-100 rounded-full h-2">
+              <div class="bg-emerald-600 h-2 rounded-full" style="width: 100%"></div>
+            </div>
+          </div>
+          <div>
+            <div class="flex justify-between mb-1">
+              <span class="text-gray-600 font-medium">Sensibilidad (Recall)</span>
+              <span class="font-bold text-gray-900">82.35%</span>
+            </div>
+            <div class="w-full bg-gray-100 rounded-full h-2">
+              <div class="bg-indigo-600 h-2 rounded-full" style="width: 82.35%"></div>
+            </div>
+          </div>
+          <div>
+            <div class="flex justify-between mb-1">
+              <span class="text-gray-600 font-medium">F1-Score Equilibrado</span>
+              <span class="font-bold text-gray-900">90.32%</span>
+            </div>
+            <div class="w-full bg-gray-100 rounded-full h-2">
+              <div class="bg-purple-600 h-2 rounded-full" style="width: 90.32%"></div>
+            </div>
+          </div>
+          <div>
+            <div class="flex justify-between mb-1">
+              <span class="text-gray-600 font-medium">Área Bajo la Curva (AUC-ROC)</span>
+              <span class="font-bold text-gray-900">0.9926</span>
+            </div>
+            <div class="w-full bg-gray-100 rounded-full h-2">
+              <div class="bg-amber-600 h-2 rounded-full" style="width: 99.26%"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4 pt-3 border-t border-gray-100 text-[11px] text-gray-500 flex justify-between">
+          <span>Validación: 10-Fold CV Stratified</span>
+          <span class="text-emerald-700 font-semibold">AUC: Excelente (≥ 0.90)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Criterios de Clasificación y Acciones Pedagógicas (Anexo 6) -->
+    <div class="custom-card p-5">
+      <h3 class="text-sm font-semibold text-gray-800 mb-2">Protocolo de Decisión Pedagógica (Anexo 6 del Proyecto)</h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs mt-3">
+        <div class="p-3 rounded-lg border border-red-200 bg-red-50/50">
+          <div class="flex items-center gap-2 mb-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-red-600"></span>
+            <span class="font-bold text-red-900 text-sm">Riesgo Crítico [P ≥ 0.75]</span>
+          </div>
+          <p class="text-red-800 leading-relaxed">
+            Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante.
+          </p>
+        </div>
+        <div class="p-3 rounded-lg border border-amber-200 bg-amber-50/50">
+          <div class="flex items-center gap-2 mb-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-600"></span>
+            <span class="font-bold text-amber-900 text-sm">Riesgo Moderado [0.40 ≤ P &lt; 0.75]</span>
+          </div>
+          <p class="text-amber-800 leading-relaxed">
+            Incorporación a talleres de refuerzo académico grupal, monitoreo semanal del desempeño y seguimiento del cumplimiento de tareas.
+          </p>
+        </div>
+        <div class="p-3 rounded-lg border border-emerald-200 bg-emerald-50/50">
+          <div class="flex items-center gap-2 mb-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-600"></span>
+            <span class="font-bold text-emerald-900 text-sm">Sin Riesgo [P &lt; 0.40]</span>
+          </div>
+          <p class="text-emerald-800 leading-relaxed">
+            Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- TAB 2: ALUMNADO Y ALERTAS TEMPRANAS -->
+  <!-- ========================================== -->
+  <div id="tab-estudiantes" class="hidden space-y-4">
+    <!-- Barra de Filtros -->
+    <div class="custom-card p-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 text-xs">
+        <div>
+          <label class="block font-semibold text-gray-700 mb-1">Buscar por ID</label>
+          <input type="text" id="filtro-busqueda" placeholder="Ej: EST-045..." oninput="filtrarEstudiantes()"
+                 class="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-700 mb-1">Grado Escolar</label>
+          <select id="filtro-grado" onchange="filtrarEstudiantes()" class="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="">Todos los grados</option>
+            <option value="4to Grado">4to Grado</option>
+            <option value="6to Grado">6to Grado</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-700 mb-1">Nivel de Riesgo</label>
+          <select id="filtro-riesgo" onchange="filtrarEstudiantes()" class="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="">Todos los niveles</option>
+            <option value="Riesgo Crítico">Riesgo Crítico</option>
+            <option value="Riesgo Moderado">Riesgo Moderado</option>
+            <option value="Sin Riesgo">Sin Riesgo</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-semibold text-gray-700 mb-1">Sección</label>
+          <select id="filtro-seccion" onchange="filtrarEstudiantes()" class="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="">Todas</option>
+            <option value="A">Sección A</option>
+            <option value="B">Sección B</option>
+          </select>
+        </div>
+        <div class="flex items-end">
+          <button onclick="limpiarFiltros()" class="w-full px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors">
+            Limpiar Filtros
+          </button>
+        </div>
+      </div>
+      <div class="flex justify-between items-center text-xs text-gray-500 mt-3 pt-2 border-t border-gray-100">
+        <span id="contador-mostrados">Mostrando 202 de 202 estudiantes</span>
+        <span>Haz clic en un estudiante para ver su <strong>Ficha Pedagógica</strong></span>
+      </div>
+    </div>
+
+    <!-- Tabla de Estudiantes -->
+    <div class="custom-card overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-xs">
+          <thead>
+            <tr class="bg-gray-50 border-b border-gray-200 text-gray-600 font-semibold uppercase tracking-wider">
+              <th class="py-3 px-3">ID</th>
+              <th class="py-3 px-3">Grado / Sec</th>
+              <th class="py-3 px-3">Edad / Sexo</th>
+              <th class="py-3 px-3 text-center">Asistencia</th>
+              <th class="py-3 px-3 text-center">Rend. Previo</th>
+              <th class="py-3 px-3 text-center">Eval. Diag.</th>
+              <th class="py-3 px-3 text-center">Tareas (%)</th>
+              <th class="py-3 px-3 text-center">Prom. Final</th>
+              <th class="py-3 px-3 text-center">Prob. Riesgo</th>
+              <th class="py-3 px-3 text-center">Nivel Riesgo</th>
+              <th class="py-3 px-3 text-center">Acción</th>
+            </tr>
+          </thead>
+          <tbody id="tabla-body" class="divide-y divide-gray-100">
+            <!-- Renderizado dinámico vía JS -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Paginador -->
+      <div class="flex items-center justify-between p-3 border-t border-gray-100 text-xs">
+        <div class="flex items-center gap-2">
+          <span>Filas por página:</span>
+          <select id="filas-por-pagina" onchange="cambiarFilasPorPagina()" class="border border-gray-200 rounded px-2 py-1">
+            <option value="10">10</option>
+            <option value="25" selected>25</option>
+            <option value="50">50</option>
+            <option value="202">Todos (202)</option>
+          </select>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="cambiarPagina(-1)" id="btn-prev" class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-40">Anterior</button>
+          <span id="indicador-pagina">Página 1 de 9</span>
+          <button onclick="cambiarPagina(1)" id="btn-next" class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-40">Siguiente</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Ficha Pedagógica -->
+  <div id="modal-ficha" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl max-w-lg w-full p-6 shadow-2xl relative">
+      <button onclick="cerrarFicha()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-700 text-lg font-bold">&times;</button>
+      <div id="ficha-contenido">
+        <!-- Rellenado por JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- TAB 3: FACTORES CLAVE (FEATURE IMPORTANCE) -->
+  <!-- ========================================== -->
+  <div id="tab-importancia" class="hidden space-y-6">
+    <div class="custom-card p-5">
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 mb-4">
+        <div>
+          <h3 class="text-base font-bold text-gray-800">Importancia de Variables en el Modelo Random Forest</h3>
+          <p class="text-xs text-gray-500">Contribución relativa (Gini Importance) de cada factor en la detección del rendimiento escolar</p>
+        </div>
+        <span class="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-semibold">Algoritmo: Breiman Random Forest</span>
+      </div>
+
+      <!-- Gráfico de Barras SVG Horizontal -->
+      <div class="space-y-3 text-xs mt-6" id="contenedor-feature-importance">
+        <!-- Renderizado dinámico -->
+      </div>
+
+      <!-- Interpretación Pedagógica -->
+      <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs pt-4 border-t border-gray-100">
+        <div class="p-4 bg-slate-50 rounded-lg border border-slate-200">
+          <h4 class="font-bold text-slate-800 text-sm mb-2">🎯 Factores Determinantes Primarios (68.8%)</h4>
+          <p class="text-slate-600 leading-relaxed mb-2">
+            El <strong>Rendimiento Previo (39.2%)</strong> y la <strong>Evaluación Diagnóstica (29.6%)</strong> representan conjuntamente casi el 70% de la capacidad explicativa del modelo. Esto ratifica que las competencias consolidadas en periodos previos y el estado inicial de aprendizaje son los mejores predictores del rendimiento futuro.
+          </p>
+        </div>
+        <div class="p-4 bg-slate-50 rounded-lg border border-slate-200">
+          <h4 class="font-bold text-slate-800 text-sm mb-2">📚 Factores de Comportamiento Escolar (27.0%)</h4>
+          <p class="text-slate-600 leading-relaxed mb-2">
+            El <strong>Cumplimiento de Tareas (11.7%)</strong>, la <strong>Participación en Clase (9.0%)</strong> y la <strong>Asistencia (6.3%)</strong> constituyen los principales factores modificables a corto plazo mediante intervenciones tutoriales y seguimiento pedagógico en el aula.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- TAB 4: SIMULADOR PREDICTIVO EN VIVO -->
+  <!-- ========================================== -->
+  <div id="tab-simulador" class="hidden space-y-6">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Panel de Controles / Sliders -->
+      <div class="custom-card p-5 lg:col-span-2">
+        <h3 class="text-base font-bold text-gray-800 mb-1">Simulador de Predicción Pedagógica en Tiempo Real</h3>
+        <p class="text-xs text-gray-500 mb-6">Ajusta los indicadores del estudiante para evaluar el riesgo estimado y ver la recomendación pedagógica sugerida.</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5 text-xs">
+          <!-- Rendimiento Previo -->
+          <div>
+            <div class="flex justify-between mb-1">
+              <label class="font-semibold text-gray-700">Rendimiento Académico Previo (0-20):</label>
+              <span id="val-rend-prev" class="font-bold text-blue-700 text-sm">11.0</span>
+            </div>
+            <input type="range" id="sim-rend-prev" min="0" max="20" step="0.5" value="11.0" oninput="simularPrediccion()" class="w-full">
+            <span class="text-[11px] text-gray-400">Peso en modelo: 39.2%</span>
+          </div>
+
+          <!-- Evaluación Diagnóstica -->
+          <div>
+            <div class="flex justify-between mb-1">
+              <label class="font-semibold text-gray-700">Evaluación Diagnóstica Inicial (0-20):</label>
+              <span id="val-eval-diag" class="font-bold text-blue-700 text-sm">10.5</span>
+            </div>
+            <input type="range" id="sim-eval-diag" min="0" max="20" step="0.5" value="10.5" oninput="simularPrediccion()" class="w-full">
+            <span class="text-[11px] text-gray-400">Peso en modelo: 29.6%</span>
+          </div>
+
+          <!-- Cumplimiento de Tareas -->
+          <div>
+            <div class="flex justify-between mb-1">
+              <label class="font-semibold text-gray-700">Cumplimiento de Tareas (%):</label>
+              <span id="val-tareas" class="font-bold text-blue-700 text-sm">65%</span>
+            </div>
+            <input type="range" id="sim-tareas" min="20" max="100" step="5" value="65" oninput="simularPrediccion()" class="w-full">
+            <span class="text-[11px] text-gray-400">Peso en modelo: 11.7%</span>
+          </div>
+
+          <!-- Asistencia -->
+          <div>
+            <div class="flex justify-between mb-1">
+              <label class="font-semibold text-gray-700">Asistencia Escolar (%):</label>
+              <span id="val-asistencia" class="font-bold text-blue-700 text-sm">75%</span>
+            </div>
+            <input type="range" id="sim-asistencia" min="50" max="100" step="1" value="75" oninput="simularPrediccion()" class="w-full">
+            <span class="text-[11px] text-gray-400">Peso en modelo: 6.3%</span>
+          </div>
+
+          <!-- Participación -->
+          <div>
+            <label class="font-semibold text-gray-700 block mb-1">Participación en Clase:</label>
+            <select id="sim-part" onchange="simularPrediccion()" class="w-full px-3 py-1.5 border border-gray-300 rounded-lg">
+              <option value="1">Bajo (1)</option>
+              <option value="2" selected>Medio (2)</option>
+              <option value="3">Alto (3)</option>
+            </select>
+            <span class="text-[11px] text-gray-400">Peso en modelo: 9.0%</span>
+          </div>
+
+          <!-- Acompañamiento Familiar -->
+          <div>
+            <label class="font-semibold text-gray-700 block mb-1">Acompañamiento Familiar:</label>
+            <select id="sim-acomp" onchange="simularPrediccion()" class="w-full px-3 py-1.5 border border-gray-300 rounded-lg">
+              <option value="1">Bajo</option>
+              <option value="2" selected>Medio</option>
+              <option value="3">Alto</option>
+            </select>
+            <span class="text-[11px] text-gray-400">Peso en modelo: 1.1%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tarjeta de Resultado Predictivo -->
+      <div class="custom-card p-5 flex flex-col justify-between" id="sim-card-resultado">
+        <div>
+          <h4 class="text-sm font-semibold text-gray-700 mb-2">Resultado Estimado por el Modelo</h4>
+          <div class="text-center py-4">
+            <span id="sim-badge-riesgo" class="px-4 py-1.5 rounded-full text-sm font-bold bg-amber-100 text-amber-800">
+              Riesgo Moderado
+            </span>
+            <div class="mt-4">
+              <span class="text-4xl font-extrabold text-gray-900" id="sim-probabilidad">58.4%</span>
+              <p class="text-xs text-gray-500 mt-1">Probabilidad de Riesgo P(Y=1)</p>
+            </div>
+          </div>
+
+          <div class="mt-4 p-3 rounded-lg border text-xs" id="sim-box-accion">
+            <p class="font-bold mb-1" id="sim-titulo-accion">Acción Pedagógica Sugerida:</p>
+            <p id="sim-texto-accion" class="leading-relaxed">
+              Incorporación a talleres de refuerzo académico grupal, monitoreo semanal del desempeño y seguimiento del cumplimiento de tareas.
+            </p>
+          </div>
+        </div>
+
+        <div class="mt-4 pt-3 border-t border-gray-100 text-[11px] text-gray-400 text-center">
+          Enfoque Human-in-the-Loop • Apoyo a la Decisión Docente
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCRIPT DE INTERACTIVIDAD Y DATOS -->
+  <script>
+    // Inyección de Datos
+    const estudiantes = [{"ID_Estudiante":"EST-001","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Masculino","Asistencia_Pct":95.9,"Rendimiento_Previo":18.7,"Evaluación_Diagnóstica":16.4,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":65.1,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":18.0,"Nivel_Logro":"Destacado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-002","Grado":"4to Grado","Sección":"A","Edad":10,"Sexo":"Femenino","Asistencia_Pct":94.6,"Rendimiento_Previo":14.6,"Evaluación_Diagnóstica":13.4,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":53.8,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":14.4,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0137,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-003","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Femenino","Asistencia_Pct":76.5,"Rendimiento_Previo":13.3,"Evaluación_Diagnóstica":14.6,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":42.6,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":13.1,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.78,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-004","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Masculino","Asistencia_Pct":91.8,"Rendimiento_Previo":13.6,"Evaluación_Diagnóstica":17.0,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":55.0,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":14.6,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.23,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-005","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Masculino","Asistencia_Pct":97.2,"Rendimiento_Previo":15.2,"Evaluación_Diagnóstica":13.1,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":49.9,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":15.0,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0147,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-006","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Femenino","Asistencia_Pct":95.7,"Rendimiento_Previo":9.9,"Evaluación_Diagnóstica":8.2,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":40.0,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":11.3,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.98,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-007","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Masculino","Asistencia_Pct":96.5,"Rendimiento_Previo":12.4,"Evaluación_Diagnóstica":12.1,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":57.3,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":13.4,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.6699,"Nivel_Riesgo":"Riesgo Moderado","Acción_Pedagógica_Propuesta":"Incorporación a talleres de refuerzo académico grupal, monitoreo semanal del desempeño y seguimiento del cumplimiento de tareas."},{"ID_Estudiante":"EST-008","Grado":"4to Grado","Sección":"A","Edad":10,"Sexo":"Masculino","Asistencia_Pct":96.1,"Rendimiento_Previo":7.9,"Evaluación_Diagnóstica":14.0,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":53.7,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":10.5,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.7984,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-009","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Femenino","Asistencia_Pct":90.7,"Rendimiento_Previo":14.5,"Evaluación_Diagnóstica":12.2,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":40.0,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":14.0,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0867,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-010","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Femenino","Asistencia_Pct":97.5,"Rendimiento_Previo":15.3,"Evaluación_Diagnóstica":17.1,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":50.7,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":16.2,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-011","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Femenino","Asistencia_Pct":92.8,"Rendimiento_Previo":11.7,"Evaluación_Diagnóstica":14.8,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":56.5,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":14.1,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0987,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-012","Grado":"4to Grado","Sección":"A","Edad":10,"Sexo":"Masculino","Asistencia_Pct":95.6,"Rendimiento_Previo":18.2,"Evaluación_Diagnóstica":15.0,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":79.3,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":16.8,"Nivel_Logro":"Destacado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-013","Grado":"4to Grado","Sección":"A","Edad":10,"Sexo":"Femenino","Asistencia_Pct":94.7,"Rendimiento_Previo":9.3,"Evaluación_Diagnóstica":11.3,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":48.5,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":12.5,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9988,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-014","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Masculino","Asistencia_Pct":97.3,"Rendimiento_Previo":8.5,"Evaluación_Diagnóstica":12.7,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":42.0,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":12.1,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9588,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-015","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Masculino","Asistencia_Pct":90.7,"Rendimiento_Previo":13.9,"Evaluación_Diagnóstica":12.6,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":53.0,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":14.0,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.02,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-016","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Femenino","Asistencia_Pct":93.7,"Rendimiento_Previo":16.6,"Evaluación_Diagnóstica":14.6,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":70.7,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":16.0,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-017","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Femenino","Asistencia_Pct":90.5,"Rendimiento_Previo":18.6,"Evaluación_Diagnóstica":15.2,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":56.7,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":16.0,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-018","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Femenino","Asistencia_Pct":98.4,"Rendimiento_Previo":11.7,"Evaluación_Diagnóstica":10.0,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":46.8,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":11.5,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9475,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-019","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Femenino","Asistencia_Pct":98.5,"Rendimiento_Previo":16.7,"Evaluación_Diagnóstica":13.9,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":57.4,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":15.1,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.003,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-020","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Femenino","Asistencia_Pct":90.5,"Rendimiento_Previo":13.1,"Evaluación_Diagnóstica":10.5,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":45.5,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":13.2,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.8611,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-021","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Masculino","Asistencia_Pct":83.0,"Rendimiento_Previo":12.6,"Evaluación_Diagnóstica":12.5,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":51.0,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":14.2,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.3508,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-022","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Masculino","Asistencia_Pct":87.4,"Rendimiento_Previo":16.0,"Evaluación_Diagnóstica":13.2,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":69.8,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":15.6,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.059,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-023","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Masculino","Asistencia_Pct":75.7,"Rendimiento_Previo":15.3,"Evaluación_Diagnóstica":14.6,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":54.8,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":14.5,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.3305,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-024","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Masculino","Asistencia_Pct":97.0,"Rendimiento_Previo":8.2,"Evaluación_Diagnóstica":6.7,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":45.2,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":10.0,"Nivel_Logro":"Inicio","Requiere_Refuerzo":1,"Probabilidad_Riesgo":1.0,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-025","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Femenino","Asistencia_Pct":76.9,"Rendimiento_Previo":17.9,"Evaluación_Diagnóstica":16.4,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":54.4,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":15.9,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0249,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-026","Grado":"4to Grado","Sección":"A","Edad":10,"Sexo":"Masculino","Asistencia_Pct":85.3,"Rendimiento_Previo":17.6,"Evaluación_Diagnóstica":17.1,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":46.2,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":17.0,"Nivel_Logro":"Destacado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.02,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-027","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Femenino","Asistencia_Pct":93.1,"Rendimiento_Previo":11.2,"Evaluación_Diagnóstica":7.9,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":57.9,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":12.7,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9011,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-028","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Femenino","Asistencia_Pct":88.2,"Rendimiento_Previo":14.5,"Evaluación_Diagnóstica":14.3,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":54.0,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":14.5,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0535,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-029","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Femenino","Asistencia_Pct":90.7,"Rendimiento_Previo":14.8,"Evaluación_Diagnóstica":16.0,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":54.4,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":16.2,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0007,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-030","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Masculino","Asistencia_Pct":78.4,"Rendimiento_Previo":14.0,"Evaluación_Diagnóstica":11.1,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":76.5,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":13.9,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.2725,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-031","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Femenino","Asistencia_Pct":95.5,"Rendimiento_Previo":11.4,"Evaluación_Diagnóstica":14.6,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":54.3,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":13.9,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.3307,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-032","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Masculino","Asistencia_Pct":89.2,"Rendimiento_Previo":11.1,"Evaluación_Diagnóstica":12.2,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":43.5,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":12.7,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9257,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-033","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Masculino","Asistencia_Pct":87.2,"Rendimiento_Previo":13.1,"Evaluación_Diagnóstica":11.4,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":48.7,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":12.9,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.72,"Nivel_Riesgo":"Riesgo Moderado","Acción_Pedagógica_Propuesta":"Incorporación a talleres de refuerzo académico grupal, monitoreo semanal del desempeño y seguimiento del cumplimiento de tareas."},{"ID_Estudiante":"EST-034","Grado":"4to Grado","Sección":"A","Edad":10,"Sexo":"Femenino","Asistencia_Pct":99.5,"Rendimiento_Previo":17.0,"Evaluación_Diagnóstica":15.1,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":71.2,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":16.0,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.02,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-035","Grado":"4to Grado","Sección":"A","Edad":10,"Sexo":"Masculino","Asistencia_Pct":88.2,"Rendimiento_Previo":14.9,"Evaluación_Diagnóstica":14.9,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":56.2,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":14.4,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0123,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-036","Grado":"4to Grado","Sección":"A","Edad":10,"Sexo":"Masculino","Asistencia_Pct":99.2,"Rendimiento_Previo":12.0,"Evaluación_Diagnóstica":12.1,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":42.5,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":12.5,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9605,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-037","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Femenino","Asistencia_Pct":88.3,"Rendimiento_Previo":15.7,"Evaluación_Diagnóstica":15.4,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":64.0,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":15.3,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0223,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-038","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Masculino","Asistencia_Pct":86.9,"Rendimiento_Previo":6.5,"Evaluación_Diagnóstica":6.8,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":40.0,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":9.0,"Nivel_Logro":"Inicio","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9867,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-039","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Femenino","Asistencia_Pct":97.7,"Rendimiento_Previo":16.9,"Evaluación_Diagnóstica":15.5,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":76.3,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":15.9,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.01,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-040","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Femenino","Asistencia_Pct":87.4,"Rendimiento_Previo":7.6,"Evaluación_Diagnóstica":6.6,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":52.0,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":9.4,"Nivel_Logro":"Inicio","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9684,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-041","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Femenino","Asistencia_Pct":96.2,"Rendimiento_Previo":12.0,"Evaluación_Diagnóstica":11.8,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":49.5,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":11.8,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9189,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-042","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Masculino","Asistencia_Pct":97.6,"Rendimiento_Previo":9.6,"Evaluación_Diagnóstica":8.8,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":59.9,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":10.9,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9993,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-043","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Masculino","Asistencia_Pct":96.2,"Rendimiento_Previo":9.1,"Evaluación_Diagnóstica":8.8,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":49.0,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":10.4,"Nivel_Logro":"Inicio","Requiere_Refuerzo":1,"Probabilidad_Riesgo":1.0,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-044","Grado":"4to Grado","Sección":"A","Edad":10,"Sexo":"Femenino","Asistencia_Pct":90.1,"Rendimiento_Previo":16.9,"Evaluación_Diagnóstica":17.4,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":65.9,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":16.0,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-045","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Masculino","Asistencia_Pct":94.2,"Rendimiento_Previo":11.7,"Evaluación_Diagnóstica":13.8,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":55.9,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":14.2,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.241,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-046","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Femenino","Asistencia_Pct":95.2,"Rendimiento_Previo":14.3,"Evaluación_Diagnóstica":14.6,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":49.7,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":15.5,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0005,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-047","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Femenino","Asistencia_Pct":77.9,"Rendimiento_Previo":13.0,"Evaluación_Diagnóstica":10.7,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":44.0,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":11.0,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9439,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-048","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Femenino","Asistencia_Pct":92.9,"Rendimiento_Previo":14.7,"Evaluación_Diagnóstica":13.2,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":64.6,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":14.4,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-049","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Masculino","Asistencia_Pct":97.3,"Rendimiento_Previo":13.4,"Evaluación_Diagnóstica":15.1,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":53.0,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":14.4,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0012,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-050","Grado":"4to Grado","Sección":"A","Edad":9,"Sexo":"Masculino","Asistencia_Pct":98.2,"Rendimiento_Previo":9.1,"Evaluación_Diagnóstica":10.4,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":45.8,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":10.3,"Nivel_Logro":"Inicio","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.995,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-051","Grado":"4to Grado","Sección":"A","Edad":10,"Sexo":"Femenino","Asistencia_Pct":97.2,"Rendimiento_Previo":16.4,"Evaluación_Diagnóstica":19.0,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":52.8,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":17.6,"Nivel_Logro":"Destacado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0007,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-052","Grado":"4to Grado","Sección":"A","Edad":10,"Sexo":"Masculino","Asistencia_Pct":92.5,"Rendimiento_Previo":11.6,"Evaluación_Diagnóstica":12.4,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":54.7,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":13.2,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.8095,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-053","Grado":"4to Grado","Sección":"B","Edad":10,"Sexo":"Masculino","Asistencia_Pct":97.2,"Rendimiento_Previo":8.2,"Evaluación_Diagnóstica":9.9,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":63.8,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":10.9,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.89,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-054","Grado":"4to Grado","Sección":"B","Edad":10,"Sexo":"Femenino","Asistencia_Pct":91.7,"Rendimiento_Previo":11.8,"Evaluación_Diagnóstica":11.3,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":42.8,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":11.3,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9265,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-055","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Femenino","Asistencia_Pct":99.0,"Rendimiento_Previo":18.0,"Evaluación_Diagnóstica":16.1,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":63.7,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":17.4,"Nivel_Logro":"Destacado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-056","Grado":"4to Grado","Sección":"B","Edad":10,"Sexo":"Femenino","Asistencia_Pct":97.0,"Rendimiento_Previo":15.9,"Evaluación_Diagnóstica":14.3,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":70.8,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":14.8,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-057","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Femenino","Asistencia_Pct":91.8,"Rendimiento_Previo":12.1,"Evaluación_Diagnóstica":13.3,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":51.3,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":13.7,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.1927,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-058","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Masculino","Asistencia_Pct":92.6,"Rendimiento_Previo":12.1,"Evaluación_Diagnóstica":13.8,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":55.8,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":13.1,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.7968,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-059","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Femenino","Asistencia_Pct":94.4,"Rendimiento_Previo":12.2,"Evaluación_Diagnóstica":10.7,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":44.3,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":13.3,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9534,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-060","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Femenino","Asistencia_Pct":94.3,"Rendimiento_Previo":19.5,"Evaluación_Diagnóstica":14.5,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":67.9,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":15.2,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.12,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-061","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Masculino","Asistencia_Pct":97.2,"Rendimiento_Previo":14.4,"Evaluación_Diagnóstica":10.3,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":55.7,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":11.7,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.8054,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-062","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Femenino","Asistencia_Pct":99.2,"Rendimiento_Previo":14.6,"Evaluación_Diagnóstica":14.6,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":66.0,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":15.2,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-063","Grado":"4to Grado","Sección":"B","Edad":10,"Sexo":"Femenino","Asistencia_Pct":89.8,"Rendimiento_Previo":16.5,"Evaluación_Diagnóstica":12.9,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":67.8,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":16.4,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.009,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-064","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Femenino","Asistencia_Pct":93.0,"Rendimiento_Previo":14.0,"Evaluación_Diagnóstica":9.4,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":76.0,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":14.4,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.4567,"Nivel_Riesgo":"Riesgo Moderado","Acción_Pedagógica_Propuesta":"Incorporación a talleres de refuerzo académico grupal, monitoreo semanal del desempeño y seguimiento del cumplimiento de tareas."},{"ID_Estudiante":"EST-065","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Femenino","Asistencia_Pct":87.4,"Rendimiento_Previo":12.4,"Evaluación_Diagnóstica":13.0,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":55.7,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":13.4,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.7156,"Nivel_Riesgo":"Riesgo Moderado","Acción_Pedagógica_Propuesta":"Incorporación a talleres de refuerzo académico grupal, monitoreo semanal del desempeño y seguimiento del cumplimiento de tareas."},{"ID_Estudiante":"EST-066","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Femenino","Asistencia_Pct":88.4,"Rendimiento_Previo":12.6,"Evaluación_Diagnóstica":16.9,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":54.3,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":13.6,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.1331,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-067","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Masculino","Asistencia_Pct":93.4,"Rendimiento_Previo":13.0,"Evaluación_Diagnóstica":12.6,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":55.4,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":13.7,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.1145,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-068","Grado":"4to Grado","Sección":"B","Edad":10,"Sexo":"Masculino","Asistencia_Pct":90.6,"Rendimiento_Previo":13.1,"Evaluación_Diagnóstica":14.2,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":50.3,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":13.6,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0596,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-069","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Femenino","Asistencia_Pct":91.2,"Rendimiento_Previo":15.5,"Evaluación_Diagnóstica":14.4,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":59.9,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":15.6,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-070","Grado":"4to Grado","Sección":"B","Edad":10,"Sexo":"Femenino","Asistencia_Pct":91.0,"Rendimiento_Previo":13.4,"Evaluación_Diagnóstica":12.7,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":51.4,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":13.9,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.092,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-071","Grado":"4to Grado","Sección":"B","Edad":10,"Sexo":"Femenino","Asistencia_Pct":89.9,"Rendimiento_Previo":15.5,"Evaluación_Diagnóstica":15.9,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":58.1,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":16.4,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.01,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-072","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Femenino","Asistencia_Pct":86.6,"Rendimiento_Previo":12.9,"Evaluación_Diagnóstica":12.1,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":62.2,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":15.3,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.1518,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-073","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Femenino","Asistencia_Pct":99.5,"Rendimiento_Previo":13.5,"Evaluación_Diagnóstica":13.5,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":48.4,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":14.6,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0397,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-074","Grado":"4to Grado","Sección":"B","Edad":10,"Sexo":"Masculino","Asistencia_Pct":90.4,"Rendimiento_Previo":6.8,"Evaluación_Diagnóstica":9.2,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":52.1,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":9.6,"Nivel_Logro":"Inicio","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.962,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-075","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Femenino","Asistencia_Pct":92.7,"Rendimiento_Previo":16.1,"Evaluación_Diagnóstica":13.5,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":69.1,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":15.5,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-076","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Femenino","Asistencia_Pct":96.8,"Rendimiento_Previo":14.3,"Evaluación_Diagnóstica":15.3,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":56.0,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":14.2,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0105,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-077","Grado":"4to Grado","Sección":"B","Edad":10,"Sexo":"Femenino","Asistencia_Pct":92.6,"Rendimiento_Previo":16.4,"Evaluación_Diagnóstica":14.5,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":42.0,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":15.0,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.04,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-078","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Femenino","Asistencia_Pct":97.8,"Rendimiento_Previo":6.5,"Evaluación_Diagnóstica":7.1,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":40.0,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":9.2,"Nivel_Logro":"Inicio","Requiere_Refuerzo":1,"Probabilidad_Riesgo":1.0,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-079","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Femenino","Asistencia_Pct":90.6,"Rendimiento_Previo":19.5,"Evaluación_Diagnóstica":17.8,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":73.8,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":17.7,"Nivel_Logro":"Destacado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-080","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Masculino","Asistencia_Pct":85.3,"Rendimiento_Previo":12.8,"Evaluación_Diagnóstica":10.9,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":50.9,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":13.1,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.8056,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-081","Grado":"4to Grado","Sección":"B","Edad":10,"Sexo":"Masculino","Asistencia_Pct":93.6,"Rendimiento_Previo":16.7,"Evaluación_Diagnóstica":15.1,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":51.8,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":15.7,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0007,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-082","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Masculino","Asistencia_Pct":85.1,"Rendimiento_Previo":9.9,"Evaluación_Diagnóstica":10.6,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":42.3,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":12.0,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9889,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-083","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Femenino","Asistencia_Pct":87.9,"Rendimiento_Previo":15.2,"Evaluación_Diagnóstica":16.0,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":62.4,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":16.0,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0323,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-084","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Masculino","Asistencia_Pct":99.6,"Rendimiento_Previo":9.8,"Evaluación_Diagnóstica":11.4,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":54.9,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":11.9,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9727,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-085","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Masculino","Asistencia_Pct":94.7,"Rendimiento_Previo":11.2,"Evaluación_Diagnóstica":11.4,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":49.4,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":12.3,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9876,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-086","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Femenino","Asistencia_Pct":89.4,"Rendimiento_Previo":19.3,"Evaluación_Diagnóstica":18.2,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":59.8,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":17.5,"Nivel_Logro":"Destacado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0023,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-087","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Masculino","Asistencia_Pct":97.5,"Rendimiento_Previo":12.6,"Evaluación_Diagnóstica":14.9,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":51.3,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":14.7,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0918,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-088","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Femenino","Asistencia_Pct":85.3,"Rendimiento_Previo":13.9,"Evaluación_Diagnóstica":14.2,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":45.5,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":13.4,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.3788,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-089","Grado":"4to Grado","Sección":"B","Edad":10,"Sexo":"Masculino","Asistencia_Pct":97.0,"Rendimiento_Previo":16.0,"Evaluación_Diagnóstica":14.6,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":72.6,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":15.6,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-090","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Masculino","Asistencia_Pct":92.7,"Rendimiento_Previo":14.8,"Evaluación_Diagnóstica":11.5,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":53.9,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":14.0,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.1196,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-091","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Femenino","Asistencia_Pct":95.9,"Rendimiento_Previo":13.7,"Evaluación_Diagnóstica":11.2,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":65.4,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":12.9,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.3792,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-092","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Masculino","Asistencia_Pct":97.2,"Rendimiento_Previo":14.4,"Evaluación_Diagnóstica":13.0,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":69.4,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":14.1,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0422,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-093","Grado":"4to Grado","Sección":"B","Edad":10,"Sexo":"Masculino","Asistencia_Pct":96.7,"Rendimiento_Previo":19.5,"Evaluación_Diagnóstica":15.8,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":73.2,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":17.0,"Nivel_Logro":"Destacado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-094","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Femenino","Asistencia_Pct":91.4,"Rendimiento_Previo":13.0,"Evaluación_Diagnóstica":12.3,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":49.8,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":13.8,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.1732,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-095","Grado":"4to Grado","Sección":"B","Edad":10,"Sexo":"Femenino","Asistencia_Pct":89.1,"Rendimiento_Previo":13.8,"Evaluación_Diagnóstica":13.3,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":57.0,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":14.5,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0378,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-096","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Masculino","Asistencia_Pct":91.7,"Rendimiento_Previo":16.6,"Evaluación_Diagnóstica":15.9,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":58.9,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":16.0,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.01,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-097","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Femenino","Asistencia_Pct":76.2,"Rendimiento_Previo":16.7,"Evaluación_Diagnóstica":14.9,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":47.4,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":15.1,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.038,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-098","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Masculino","Asistencia_Pct":92.4,"Rendimiento_Previo":17.0,"Evaluación_Diagnóstica":16.1,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":62.5,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":15.7,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-099","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Masculino","Asistencia_Pct":93.1,"Rendimiento_Previo":15.2,"Evaluación_Diagnóstica":14.2,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":47.8,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":15.2,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.003,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-100","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Femenino","Asistencia_Pct":93.5,"Rendimiento_Previo":9.5,"Evaluación_Diagnóstica":6.8,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":57.8,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":10.6,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9859,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-101","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Femenino","Asistencia_Pct":90.4,"Rendimiento_Previo":18.4,"Evaluación_Diagnóstica":14.5,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":57.8,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":16.5,"Nivel_Logro":"Destacado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-102","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Femenino","Asistencia_Pct":96.6,"Rendimiento_Previo":9.5,"Evaluación_Diagnóstica":10.1,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":50.8,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":10.6,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9533,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-103","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Femenino","Asistencia_Pct":84.7,"Rendimiento_Previo":14.2,"Evaluación_Diagnóstica":11.3,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":55.4,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":12.2,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.8075,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-104","Grado":"4to Grado","Sección":"B","Edad":9,"Sexo":"Femenino","Asistencia_Pct":92.4,"Rendimiento_Previo":10.8,"Evaluación_Diagnóstica":12.3,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":47.9,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":12.1,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9543,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-105","Grado":"6to Grado","Sección":"A","Edad":12,"Sexo":"Femenino","Asistencia_Pct":93.6,"Rendimiento_Previo":13.0,"Evaluación_Diagnóstica":15.4,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":58.6,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":15.3,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0509,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-106","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Masculino","Asistencia_Pct":95.3,"Rendimiento_Previo":14.3,"Evaluación_Diagnóstica":15.7,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":52.7,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":15.8,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0012,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-107","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Femenino","Asistencia_Pct":94.4,"Rendimiento_Previo":14.2,"Evaluación_Diagnóstica":13.0,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":63.0,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":14.9,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0425,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-108","Grado":"6to Grado","Sección":"A","Edad":12,"Sexo":"Masculino","Asistencia_Pct":92.8,"Rendimiento_Previo":14.6,"Evaluación_Diagnóstica":16.4,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":45.4,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":15.5,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.01,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-109","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Masculino","Asistencia_Pct":90.6,"Rendimiento_Previo":18.4,"Evaluación_Diagnóstica":16.4,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":62.6,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":17.4,"Nivel_Logro":"Destacado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-110","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Masculino","Asistencia_Pct":93.3,"Rendimiento_Previo":14.7,"Evaluación_Diagnóstica":13.1,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":72.0,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":15.1,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0017,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-111","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Masculino","Asistencia_Pct":99.3,"Rendimiento_Previo":12.4,"Evaluación_Diagnóstica":11.2,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":46.6,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":12.9,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.8749,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-112","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Femenino","Asistencia_Pct":99.7,"Rendimiento_Previo":16.3,"Evaluación_Diagnóstica":14.3,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":55.6,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":15.2,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.095,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-113","Grado":"6to Grado","Sección":"A","Edad":12,"Sexo":"Femenino","Asistencia_Pct":97.6,"Rendimiento_Previo":17.0,"Evaluación_Diagnóstica":14.6,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":65.6,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":16.6,"Nivel_Logro":"Destacado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.01,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-114","Grado":"6to Grado","Sección":"A","Edad":12,"Sexo":"Femenino","Asistencia_Pct":93.6,"Rendimiento_Previo":9.3,"Evaluación_Diagnóstica":10.6,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":49.4,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":11.6,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":1.0,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-115","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Masculino","Asistencia_Pct":92.0,"Rendimiento_Previo":15.1,"Evaluación_Diagnóstica":14.3,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":59.6,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":15.1,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.01,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-116","Grado":"6to Grado","Sección":"A","Edad":12,"Sexo":"Masculino","Asistencia_Pct":86.4,"Rendimiento_Previo":15.4,"Evaluación_Diagnóstica":14.2,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":59.5,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":15.2,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.1923,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-117","Grado":"6to Grado","Sección":"A","Edad":12,"Sexo":"Masculino","Asistencia_Pct":95.6,"Rendimiento_Previo":12.2,"Evaluación_Diagnóstica":12.9,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":58.3,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":13.2,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9024,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-118","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Masculino","Asistencia_Pct":90.0,"Rendimiento_Previo":17.6,"Evaluación_Diagnóstica":17.8,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":69.0,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":17.3,"Nivel_Logro":"Destacado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-119","Grado":"6to Grado","Sección":"A","Edad":12,"Sexo":"Femenino","Asistencia_Pct":83.1,"Rendimiento_Previo":12.7,"Evaluación_Diagnóstica":14.2,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":53.5,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":12.7,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.7707,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-120","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Femenino","Asistencia_Pct":93.0,"Rendimiento_Previo":13.6,"Evaluación_Diagnóstica":10.4,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":52.7,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":11.7,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.6349,"Nivel_Riesgo":"Riesgo Moderado","Acción_Pedagógica_Propuesta":"Incorporación a talleres de refuerzo académico grupal, monitoreo semanal del desempeño y seguimiento del cumplimiento de tareas."},{"ID_Estudiante":"EST-121","Grado":"6to Grado","Sección":"A","Edad":12,"Sexo":"Femenino","Asistencia_Pct":99.6,"Rendimiento_Previo":12.6,"Evaluación_Diagnóstica":7.8,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":60.4,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":11.6,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.8299,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-122","Grado":"6to Grado","Sección":"A","Edad":12,"Sexo":"Masculino","Asistencia_Pct":85.6,"Rendimiento_Previo":13.2,"Evaluación_Diagnóstica":14.5,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":67.0,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":13.1,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.7161,"Nivel_Riesgo":"Riesgo Moderado","Acción_Pedagógica_Propuesta":"Incorporación a talleres de refuerzo académico grupal, monitoreo semanal del desempeño y seguimiento del cumplimiento de tareas."},{"ID_Estudiante":"EST-123","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Femenino","Asistencia_Pct":95.0,"Rendimiento_Previo":9.7,"Evaluación_Diagnóstica":8.0,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":48.0,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":10.6,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.99,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-124","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Femenino","Asistencia_Pct":95.6,"Rendimiento_Previo":8.6,"Evaluación_Diagnóstica":9.4,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":40.0,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":10.4,"Nivel_Logro":"Inicio","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.99,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-125","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Femenino","Asistencia_Pct":93.1,"Rendimiento_Previo":18.3,"Evaluación_Diagnóstica":14.0,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":71.1,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":15.9,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.02,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-126","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Femenino","Asistencia_Pct":96.3,"Rendimiento_Previo":10.5,"Evaluación_Diagnóstica":7.8,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":49.7,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":12.1,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9883,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-127","Grado":"6to Grado","Sección":"A","Edad":12,"Sexo":"Masculino","Asistencia_Pct":86.8,"Rendimiento_Previo":10.0,"Evaluación_Diagnóstica":11.7,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":40.0,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":11.3,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.99,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-128","Grado":"6to Grado","Sección":"A","Edad":12,"Sexo":"Masculino","Asistencia_Pct":91.7,"Rendimiento_Previo":6.5,"Evaluación_Diagnóstica":9.8,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":49.7,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":10.8,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9612,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-129","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Masculino","Asistencia_Pct":93.4,"Rendimiento_Previo":11.2,"Evaluación_Diagnóstica":10.4,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":46.7,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":12.5,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9929,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-130","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Femenino","Asistencia_Pct":87.8,"Rendimiento_Previo":9.0,"Evaluación_Diagnóstica":5.4,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":45.0,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":9.0,"Nivel_Logro":"Inicio","Requiere_Refuerzo":1,"Probabilidad_Riesgo":1.0,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-131","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Masculino","Asistencia_Pct":89.0,"Rendimiento_Previo":18.5,"Evaluación_Diagnóstica":15.2,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":64.0,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":16.9,"Nivel_Logro":"Destacado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0323,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-132","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Masculino","Asistencia_Pct":92.7,"Rendimiento_Previo":16.4,"Evaluación_Diagnóstica":15.6,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":60.6,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":16.4,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-133","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Masculino","Asistencia_Pct":90.2,"Rendimiento_Previo":11.0,"Evaluación_Diagnóstica":8.7,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":55.3,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":12.3,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9672,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-134","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Masculino","Asistencia_Pct":92.1,"Rendimiento_Previo":19.5,"Evaluación_Diagnóstica":17.2,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":60.3,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":17.0,"Nivel_Logro":"Destacado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-135","Grado":"6to Grado","Sección":"A","Edad":12,"Sexo":"Femenino","Asistencia_Pct":97.9,"Rendimiento_Previo":16.3,"Evaluación_Diagnóstica":14.8,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":64.6,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":15.4,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.01,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-136","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Femenino","Asistencia_Pct":95.4,"Rendimiento_Previo":12.2,"Evaluación_Diagnóstica":13.2,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":51.1,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":14.3,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.1731,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-137","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Masculino","Asistencia_Pct":89.8,"Rendimiento_Previo":6.5,"Evaluación_Diagnóstica":8.6,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":48.3,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":9.7,"Nivel_Logro":"Inicio","Requiere_Refuerzo":1,"Probabilidad_Riesgo":1.0,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-138","Grado":"6to Grado","Sección":"A","Edad":12,"Sexo":"Masculino","Asistencia_Pct":94.5,"Rendimiento_Previo":19.5,"Evaluación_Diagnóstica":15.1,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":69.5,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":16.7,"Nivel_Logro":"Destacado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0467,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-139","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Masculino","Asistencia_Pct":84.4,"Rendimiento_Previo":8.8,"Evaluación_Diagnóstica":12.1,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":40.0,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":10.5,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":1.0,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-140","Grado":"6to Grado","Sección":"A","Edad":12,"Sexo":"Masculino","Asistencia_Pct":80.5,"Rendimiento_Previo":7.9,"Evaluación_Diagnóstica":9.0,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":50.5,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":10.2,"Nivel_Logro":"Inicio","Requiere_Refuerzo":1,"Probabilidad_Riesgo":1.0,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-141","Grado":"6to Grado","Sección":"A","Edad":12,"Sexo":"Masculino","Asistencia_Pct":92.3,"Rendimiento_Previo":16.5,"Evaluación_Diagnóstica":14.9,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":54.8,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":14.7,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.024,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-142","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Masculino","Asistencia_Pct":94.6,"Rendimiento_Previo":19.5,"Evaluación_Diagnóstica":15.2,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":71.0,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":18.0,"Nivel_Logro":"Destacado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-143","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Masculino","Asistencia_Pct":97.0,"Rendimiento_Previo":17.6,"Evaluación_Diagnóstica":14.8,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":65.2,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":16.3,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-144","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Femenino","Asistencia_Pct":97.1,"Rendimiento_Previo":15.0,"Evaluación_Diagnóstica":12.4,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":72.8,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":15.7,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0129,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-145","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Femenino","Asistencia_Pct":97.1,"Rendimiento_Previo":15.1,"Evaluación_Diagnóstica":13.7,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":56.5,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":14.9,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.003,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-146","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Masculino","Asistencia_Pct":97.3,"Rendimiento_Previo":15.9,"Evaluación_Diagnóstica":17.6,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":56.8,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":16.9,"Nivel_Logro":"Destacado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-147","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Masculino","Asistencia_Pct":91.5,"Rendimiento_Previo":15.6,"Evaluación_Diagnóstica":11.9,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":57.3,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":14.3,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0229,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-148","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Femenino","Asistencia_Pct":88.2,"Rendimiento_Previo":14.1,"Evaluación_Diagnóstica":10.5,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":51.6,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":12.7,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.8588,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-149","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Masculino","Asistencia_Pct":90.5,"Rendimiento_Previo":13.5,"Evaluación_Diagnóstica":15.6,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":60.1,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":14.3,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0225,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-150","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Femenino","Asistencia_Pct":91.0,"Rendimiento_Previo":13.0,"Evaluación_Diagnóstica":12.3,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":40.2,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":12.2,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.8571,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-151","Grado":"6to Grado","Sección":"A","Edad":12,"Sexo":"Femenino","Asistencia_Pct":94.7,"Rendimiento_Previo":10.8,"Evaluación_Diagnóstica":10.0,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":42.3,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":12.2,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.984,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-152","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Masculino","Asistencia_Pct":83.5,"Rendimiento_Previo":12.3,"Evaluación_Diagnóstica":14.1,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":41.2,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":13.2,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.8434,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-153","Grado":"6to Grado","Sección":"A","Edad":11,"Sexo":"Masculino","Asistencia_Pct":97.5,"Rendimiento_Previo":7.8,"Evaluación_Diagnóstica":8.2,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":54.3,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":10.7,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9202,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-154","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Femenino","Asistencia_Pct":87.8,"Rendimiento_Previo":12.9,"Evaluación_Diagnóstica":15.9,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":65.7,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":13.6,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.184,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-155","Grado":"6to Grado","Sección":"B","Edad":12,"Sexo":"Masculino","Asistencia_Pct":87.6,"Rendimiento_Previo":10.0,"Evaluación_Diagnóstica":11.9,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":46.4,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":10.1,"Nivel_Logro":"Inicio","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.99,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-156","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Femenino","Asistencia_Pct":94.0,"Rendimiento_Previo":9.7,"Evaluación_Diagnóstica":9.6,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":47.4,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":10.6,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":1.0,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-157","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Femenino","Asistencia_Pct":92.2,"Rendimiento_Previo":13.8,"Evaluación_Diagnóstica":17.1,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":55.3,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":16.6,"Nivel_Logro":"Destacado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0332,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-158","Grado":"6to Grado","Sección":"B","Edad":12,"Sexo":"Femenino","Asistencia_Pct":96.7,"Rendimiento_Previo":17.7,"Evaluación_Diagnóstica":14.6,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":71.6,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":16.7,"Nivel_Logro":"Destacado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.03,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-159","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Masculino","Asistencia_Pct":82.0,"Rendimiento_Previo":16.1,"Evaluación_Diagnóstica":16.0,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":47.9,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":15.5,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.048,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-160","Grado":"6to Grado","Sección":"B","Edad":12,"Sexo":"Femenino","Asistencia_Pct":90.6,"Rendimiento_Previo":8.2,"Evaluación_Diagnóstica":10.1,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":47.2,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":10.4,"Nivel_Logro":"Inicio","Requiere_Refuerzo":1,"Probabilidad_Riesgo":1.0,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-161","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Masculino","Asistencia_Pct":98.1,"Rendimiento_Previo":10.0,"Evaluación_Diagnóstica":13.0,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":58.2,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":12.9,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9764,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-162","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Femenino","Asistencia_Pct":84.5,"Rendimiento_Previo":16.2,"Evaluación_Diagnóstica":17.5,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":60.3,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":17.0,"Nivel_Logro":"Destacado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.03,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-163","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Femenino","Asistencia_Pct":88.6,"Rendimiento_Previo":10.1,"Evaluación_Diagnóstica":10.8,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":49.3,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":10.7,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.99,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-164","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Masculino","Asistencia_Pct":92.5,"Rendimiento_Previo":12.5,"Evaluación_Diagnóstica":11.0,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":60.8,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":13.7,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.3591,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-165","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Femenino","Asistencia_Pct":93.0,"Rendimiento_Previo":15.0,"Evaluación_Diagnóstica":14.8,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":40.0,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":15.0,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.05,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-166","Grado":"6to Grado","Sección":"B","Edad":12,"Sexo":"Femenino","Asistencia_Pct":92.1,"Rendimiento_Previo":10.1,"Evaluación_Diagnóstica":9.5,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":54.2,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":11.3,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9965,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-167","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Masculino","Asistencia_Pct":95.8,"Rendimiento_Previo":13.5,"Evaluación_Diagnóstica":16.6,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":50.1,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":14.8,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.25,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-168","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Masculino","Asistencia_Pct":93.5,"Rendimiento_Previo":8.9,"Evaluación_Diagnóstica":10.2,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":40.0,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":10.5,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.995,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-169","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Masculino","Asistencia_Pct":82.5,"Rendimiento_Previo":11.3,"Evaluación_Diagnóstica":10.9,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":51.9,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":12.8,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9507,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-170","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Masculino","Asistencia_Pct":84.5,"Rendimiento_Previo":14.2,"Evaluación_Diagnóstica":13.8,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":64.1,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":14.6,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.3327,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-171","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Masculino","Asistencia_Pct":93.6,"Rendimiento_Previo":8.1,"Evaluación_Diagnóstica":7.0,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":44.9,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":9.1,"Nivel_Logro":"Inicio","Requiere_Refuerzo":1,"Probabilidad_Riesgo":1.0,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-172","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Femenino","Asistencia_Pct":91.0,"Rendimiento_Previo":14.6,"Evaluación_Diagnóstica":11.9,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":63.3,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":14.3,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0129,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-173","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Masculino","Asistencia_Pct":96.7,"Rendimiento_Previo":13.1,"Evaluación_Diagnóstica":14.9,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":67.9,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":15.0,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0325,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-174","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Masculino","Asistencia_Pct":89.5,"Rendimiento_Previo":15.0,"Evaluación_Diagnóstica":12.8,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":66.4,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":15.7,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0323,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-175","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Femenino","Asistencia_Pct":96.1,"Rendimiento_Previo":13.9,"Evaluación_Diagnóstica":11.4,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":69.2,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":12.8,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.37,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-176","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Masculino","Asistencia_Pct":95.7,"Rendimiento_Previo":17.6,"Evaluación_Diagnóstica":16.6,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":67.8,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":16.5,"Nivel_Logro":"Destacado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-177","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Femenino","Asistencia_Pct":98.7,"Rendimiento_Previo":13.6,"Evaluación_Diagnóstica":15.2,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":57.0,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":14.9,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0672,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-178","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Masculino","Asistencia_Pct":91.9,"Rendimiento_Previo":11.8,"Evaluación_Diagnóstica":13.2,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":40.0,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":13.3,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.5487,"Nivel_Riesgo":"Riesgo Moderado","Acción_Pedagógica_Propuesta":"Incorporación a talleres de refuerzo académico grupal, monitoreo semanal del desempeño y seguimiento del cumplimiento de tareas."},{"ID_Estudiante":"EST-179","Grado":"6to Grado","Sección":"B","Edad":12,"Sexo":"Masculino","Asistencia_Pct":96.3,"Rendimiento_Previo":13.6,"Evaluación_Diagnóstica":14.8,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":53.7,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":14.6,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0662,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-180","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Femenino","Asistencia_Pct":90.7,"Rendimiento_Previo":14.9,"Evaluación_Diagnóstica":12.5,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":49.3,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":14.5,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.1216,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-181","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Femenino","Asistencia_Pct":78.7,"Rendimiento_Previo":13.4,"Evaluación_Diagnóstica":10.4,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":67.4,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":12.7,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.792,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-182","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Femenino","Asistencia_Pct":91.6,"Rendimiento_Previo":13.3,"Evaluación_Diagnóstica":15.5,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":52.4,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":15.7,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0032,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-183","Grado":"6to Grado","Sección":"B","Edad":12,"Sexo":"Femenino","Asistencia_Pct":87.5,"Rendimiento_Previo":11.0,"Evaluación_Diagnóstica":10.8,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":49.8,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":11.4,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9783,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-184","Grado":"6to Grado","Sección":"B","Edad":12,"Sexo":"Femenino","Asistencia_Pct":89.8,"Rendimiento_Previo":11.1,"Evaluación_Diagnóstica":11.0,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":54.1,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":11.8,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9638,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-185","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Masculino","Asistencia_Pct":79.1,"Rendimiento_Previo":8.7,"Evaluación_Diagnóstica":12.2,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":43.0,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":10.9,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":1.0,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-186","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Masculino","Asistencia_Pct":96.6,"Rendimiento_Previo":18.8,"Evaluación_Diagnóstica":17.4,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":77.6,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":17.3,"Nivel_Logro":"Destacado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-187","Grado":"6to Grado","Sección":"B","Edad":12,"Sexo":"Femenino","Asistencia_Pct":99.3,"Rendimiento_Previo":9.2,"Evaluación_Diagnóstica":11.0,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":44.5,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":11.3,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.985,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-188","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Femenino","Asistencia_Pct":99.8,"Rendimiento_Previo":11.0,"Evaluación_Diagnóstica":15.2,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":54.1,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":15.1,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.2191,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-189","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Femenino","Asistencia_Pct":92.8,"Rendimiento_Previo":10.9,"Evaluación_Diagnóstica":10.1,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":44.3,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":11.5,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.995,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-190","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Masculino","Asistencia_Pct":91.0,"Rendimiento_Previo":16.1,"Evaluación_Diagnóstica":16.3,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":47.5,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":16.0,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-191","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Masculino","Asistencia_Pct":98.0,"Rendimiento_Previo":12.3,"Evaluación_Diagnóstica":12.3,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":49.2,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":12.5,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9008,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-192","Grado":"6to Grado","Sección":"B","Edad":12,"Sexo":"Femenino","Asistencia_Pct":92.6,"Rendimiento_Previo":17.2,"Evaluación_Diagnóstica":15.9,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":60.0,"Acompañamiento_Familiar":"Bajo","Promedio_Final_2025":15.4,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0067,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-193","Grado":"6to Grado","Sección":"B","Edad":12,"Sexo":"Masculino","Asistencia_Pct":96.1,"Rendimiento_Previo":11.0,"Evaluación_Diagnóstica":14.1,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":48.0,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":13.0,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.953,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-194","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Femenino","Asistencia_Pct":92.4,"Rendimiento_Previo":14.1,"Evaluación_Diagnóstica":14.3,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":49.7,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":14.1,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0325,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-195","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Femenino","Asistencia_Pct":88.1,"Rendimiento_Previo":10.5,"Evaluación_Diagnóstica":12.0,"Participación_Académica":"Bajo","Cumplimiento_Tareas_Pct":40.0,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":12.5,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.99,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-196","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Masculino","Asistencia_Pct":91.7,"Rendimiento_Previo":19.5,"Evaluación_Diagnóstica":18.8,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":63.0,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":18.1,"Nivel_Logro":"Destacado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-197","Grado":"6to Grado","Sección":"B","Edad":12,"Sexo":"Femenino","Asistencia_Pct":96.4,"Rendimiento_Previo":9.4,"Evaluación_Diagnóstica":9.7,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":40.0,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":10.6,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.994,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."},{"ID_Estudiante":"EST-198","Grado":"6to Grado","Sección":"B","Edad":12,"Sexo":"Femenino","Asistencia_Pct":92.0,"Rendimiento_Previo":14.2,"Evaluación_Diagnóstica":11.9,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":61.4,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":14.7,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0701,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-199","Grado":"6to Grado","Sección":"B","Edad":12,"Sexo":"Masculino","Asistencia_Pct":94.8,"Rendimiento_Previo":15.2,"Evaluación_Diagnóstica":12.2,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":58.4,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":15.3,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.0162,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-200","Grado":"6to Grado","Sección":"B","Edad":12,"Sexo":"Femenino","Asistencia_Pct":95.4,"Rendimiento_Previo":14.5,"Evaluación_Diagnóstica":10.1,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":45.2,"Acompañamiento_Familiar":"Medio","Promedio_Final_2025":13.9,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.2319,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-201","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Masculino","Asistencia_Pct":94.5,"Rendimiento_Previo":12.6,"Evaluación_Diagnóstica":16.1,"Participación_Académica":"Alto","Cumplimiento_Tareas_Pct":51.0,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":16.0,"Nivel_Logro":"Logrado","Requiere_Refuerzo":0,"Probabilidad_Riesgo":0.1075,"Nivel_Riesgo":"Sin Riesgo","Acción_Pedagógica_Propuesta":"Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular."},{"ID_Estudiante":"EST-202","Grado":"6to Grado","Sección":"B","Edad":11,"Sexo":"Femenino","Asistencia_Pct":96.7,"Rendimiento_Previo":12.8,"Evaluación_Diagnóstica":10.5,"Participación_Académica":"Medio","Cumplimiento_Tareas_Pct":48.5,"Acompañamiento_Familiar":"Alto","Promedio_Final_2025":12.6,"Nivel_Logro":"Proceso","Requiere_Refuerzo":1,"Probabilidad_Riesgo":0.9155,"Nivel_Riesgo":"Riesgo Crítico","Acción_Pedagógica_Propuesta":"Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante."}];
+    const metrics = {"Accuracy": 0.9268, "Precision": 1.0, "Recall": 0.8235, "F1_Score": 0.9032, "AUC_ROC": 0.9926, "CV_Accuracy_Mean": 0.9, "CV_Recall_Mean": 0.8952, "CV_F1_Mean": 0.8867};
+    const featureImportances = [{"Variable": "Rendimiento Previo", "Importancia": 0.3923}, {"Variable": "Evaluación Diagnóstica", "Importancia": 0.2962}, {"Variable": "Cumplimiento Tareas (%)", "Importancia": 0.1174}, {"Variable": "Participación Académica", "Importancia": 0.0899}, {"Variable": "Asistencia (%)", "Importancia": 0.0628}, {"Variable": "Edad", "Importancia": 0.0152}, {"Variable": "Acompañamiento Familiar", "Importancia": 0.0114}, {"Variable": "Sexo", "Importancia": 0.0098}, {"Variable": "Grado", "Importancia": 0.005}];
+
+    let estudiantesFiltrados = [...estudiantes];
+    let paginaActual = 1;
+    let filasPorPagina = 25;
+
+    // Cambiar de Pestaña
+    function switchTab(tabId) {
+      document.querySelectorAll('[id^="tab-"]').forEach(el => {
+        if (el.id.startsWith('tab-btn-')) {
+          el.classList.remove('active', 'text-blue-600', 'border-b-2', 'border-blue-600');
+          el.classList.add('text-gray-500');
+        } else {
+          el.classList.add('hidden');
+        }
+      });
+
+      document.getElementById('tab-' + tabId).classList.remove('hidden');
+      const btn = document.getElementById('tab-btn-' + tabId);
+      btn.classList.add('active', 'text-blue-600', 'border-b-2', 'border-blue-600');
+      btn.classList.remove('text-gray-500');
+    }
+
+    // Renderizar Feature Importance
+    function renderFeatureImportance() {
+      const cont = document.getElementById('contenedor-feature-importance');
+      if (!cont) return;
+      cont.innerHTML = '';
+
+      featureImportances.forEach(item => {
+        const pct = (item.Importancia * 100).toFixed(1);
+        const row = document.createElement('div');
+        row.innerHTML = `
+          <div class="flex justify-between items-center mb-1">
+            <span class="font-medium text-gray-700">\${item.Variable}</span>
+            <span class="font-bold text-gray-900">\${pct}%</span>
+          </div>
+          <div class="w-full bg-gray-100 rounded-full h-3">
+            <div class="bg-indigo-700 h-3 rounded-full" style="width: \${pct}%"></div>
+          </div>
+        `;
+        cont.appendChild(row);
+      });
+    }
+
+    // Filtrar Estudiantes
+    function filtrarEstudiantes() {
+      const q = document.getElementById('filtro-busqueda').value.toLowerCase().trim();
+      const grado = document.getElementById('filtro-grado').value;
+      const riesgo = document.getElementById('filtro-riesgo').value;
+      const seccion = document.getElementById('filtro-seccion').value;
+
+      estudiantesFiltrados = estudiantes.filter(e => {
+        const matchQ = !q || e.ID_Estudiante.toLowerCase().includes(q);
+        const matchGrado = !grado || e.Grado === grado;
+        const matchRiesgo = !riesgo || e.Nivel_Riesgo === riesgo;
+        const secVal = e.Sección || e.Seccion;
+        const matchSeccion = !seccion || secVal === seccion;
+        return matchQ && matchGrado && matchRiesgo && matchSeccion;
+      });
+
+      paginaActual = 1;
+      renderTablaEstudiantes();
+    }
+
+    function limpiarFiltros() {
+      document.getElementById('filtro-busqueda').value = '';
+      document.getElementById('filtro-grado').value = '';
+      document.getElementById('filtro-riesgo').value = '';
+      document.getElementById('filtro-seccion').value = '';
+      filtrarEstudiantes();
+    }
+
+    function cambiarFilasPorPagina() {
+      filasPorPagina = parseInt(document.getElementById('filas-por-pagina').value);
+      paginaActual = 1;
+      renderTablaEstudiantes();
+    }
+
+    function cambiarPagina(delta) {
+      paginaActual += delta;
+      renderTablaEstudiantes();
+    }
+
+    // Renderizar Tabla
+    function renderTablaEstudiantes() {
+      const tbody = document.getElementById('tabla-body');
+      tbody.innerHTML = '';
+
+      const total = estudiantesFiltrados.length;
+      document.getElementById('contador-mostrados').innerText = `Mostrando \${total} de \${estudiantes.length} estudiantes`;
+
+      const totalPaginas = Math.ceil(total / filasPorPagina) || 1;
+      if (paginaActual > totalPaginas) paginaActual = totalPaginas;
+      if (paginaActual < 1) paginaActual = 1;
+
+      document.getElementById('indicador-pagina').innerText = `Página \${paginaActual} de \${totalPaginas}`;
+      document.getElementById('btn-prev').disabled = paginaActual === 1;
+      document.getElementById('btn-next').disabled = paginaActual === totalPaginas;
+
+      const inicio = (paginaActual - 1) * filasPorPagina;
+      const paginaData = estudiantesFiltrados.slice(inicio, inicio + filasPorPagina);
+
+      if (paginaData.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="11" class="py-6 text-center text-gray-400">No se encontraron estudiantes con los filtros seleccionados</td></tr>`;
+        return;
+      }
+
+      paginaData.forEach(est => {
+        let badgeColor = 'bg-emerald-100 text-emerald-800 border border-emerald-200';
+        if (est.Nivel_Riesgo === 'Riesgo Crítico') badgeColor = 'bg-red-100 text-red-800 border border-red-200';
+        else if (est.Nivel_Riesgo === 'Riesgo Moderado') badgeColor = 'bg-amber-100 text-amber-800 border border-amber-200';
+
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-blue-50/50 cursor-pointer transition-colors';
+        tr.onclick = () => abrirFicha(est);
+
+        const secVal = est.Sección || est.Seccion;
+        const diagVal = (est.Evaluación_Diagnóstica !== undefined ? est.Evaluación_Diagnóstica : est.Evaluacion_Diagnostica);
+        const partVal = est.Participación_Académica || est.Participacion_Academica;
+        const acompVal = est.Acompañamiento_Familiar || est.Acompanamiento_Familiar;
+        const accionVal = est.Acción_Pedagógica_Propuesta || est.Accion_Pedagogica_Propuesta;
+
+        tr.innerHTML = `
+          <td class="py-2.5 px-3 font-mono font-bold text-blue-900">\${est.ID_Estudiante}</td>
+          <td class="py-2.5 px-3">\${est.Grado} "\${secVal}"</td>
+          <td class="py-2.5 px-3 text-gray-600">\${est.Edad} años • \${est.Sexo}</td>
+          <td class="py-2.5 px-3 text-center font-medium">\${est.Asistencia_Pct}%</td>
+          <td class="py-2.5 px-3 text-center font-medium">\${est.Rendimiento_Previo.toFixed(1)}</td>
+          <td class="py-2.5 px-3 text-center font-medium">\${Number(diagVal).toFixed(1)}</td>
+          <td class="py-2.5 px-3 text-center font-medium">\${est.Cumplimiento_Tareas_Pct}%</td>
+          <td class="py-2.5 px-3 text-center font-bold text-gray-900">\${est.Promedio_Final_2025.toFixed(1)}</td>
+          <td class="py-2.5 px-3 text-center font-mono font-semibold">\${(est.Probabilidad_Riesgo * 100).toFixed(1)}%</td>
+          <td class="py-2.5 px-3 text-center">
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold \${badgeColor}">
+              \${est.Nivel_Riesgo}
+            </span>
+          </td>
+          <td class="py-2.5 px-3 text-center">
+            <button class="px-2 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded text-[11px] font-medium">Ver</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Abrir Ficha Pedagógica
+    function abrirFicha(est) {
+      const modal = document.getElementById('modal-ficha');
+      const cont = document.getElementById('ficha-contenido');
+
+      let riesgoClass = 'text-emerald-700 bg-emerald-50 border-emerald-200';
+      if (est.Nivel_Riesgo === 'Riesgo Crítico') riesgoClass = 'text-red-700 bg-red-50 border-red-200';
+      else if (est.Nivel_Riesgo === 'Riesgo Moderado') riesgoClass = 'text-amber-700 bg-amber-50 border-amber-200';
+
+      const secVal = est.Sección || est.Seccion;
+      const diagVal = (est.Evaluación_Diagnóstica !== undefined ? est.Evaluación_Diagnóstica : est.Evaluacion_Diagnostica);
+      const partVal = est.Participación_Académica || est.Participacion_Academica;
+      const acompVal = est.Acompañamiento_Familiar || est.Acompanamiento_Familiar;
+      const accionVal = est.Acción_Pedagógica_Propuesta || est.Accion_Pedagogica_Propuesta;
+
+      cont.innerHTML = `
+        <div class="border-b border-gray-100 pb-3 mb-4">
+          <div class="flex justify-between items-start">
+            <div>
+              <span class="text-xs font-mono font-bold text-blue-900 bg-blue-100 px-2 py-0.5 rounded">\${est.ID_Estudiante}</span>
+              <h3 class="text-lg font-bold text-gray-900 mt-1">\${est.Grado} - Sección "\${secVal}"</h3>
+              <p class="text-xs text-gray-500">\${est.Edad} años | Sexo: \${est.Sexo}</p>
+            </div>
+            <div class="text-right">
+              <span class="px-2.5 py-1 rounded-full text-xs font-bold border \${riesgoClass}">
+                \${est.Nivel_Riesgo}
+              </span>
+              <p class="text-xs font-mono font-bold text-gray-700 mt-1">\${(est.Probabilidad_Riesgo * 100).toFixed(1)}% Riesgo</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 text-xs mb-4">
+          <div class="p-2.5 bg-gray-50 rounded-lg">
+            <span class="text-gray-500 block">Rendimiento Previo:</span>
+            <span class="text-base font-bold text-gray-900">\${est.Rendimiento_Previo.toFixed(1)} / 20</span>
+          </div>
+          <div class="p-2.5 bg-gray-50 rounded-lg">
+            <span class="text-gray-500 block">Evaluación Diagnóstica:</span>
+            <span class="text-base font-bold text-gray-900">\${Number(diagVal).toFixed(1)} / 20</span>
+          </div>
+          <div class="p-2.5 bg-gray-50 rounded-lg">
+            <span class="text-gray-500 block">Asistencia a Clases:</span>
+            <span class="text-base font-bold text-gray-900">\${est.Asistencia_Pct}%</span>
+          </div>
+          <div class="p-2.5 bg-gray-50 rounded-lg">
+            <span class="text-gray-500 block">Cumplimiento Tareas:</span>
+            <span class="text-base font-bold text-gray-900">\${est.Cumplimiento_Tareas_Pct}%</span>
+          </div>
+          <div class="p-2.5 bg-gray-50 rounded-lg">
+            <span class="text-gray-500 block">Participación en Aula:</span>
+            <span class="text-sm font-bold text-gray-900">\${partVal}</span>
+          </div>
+          <div class="p-2.5 bg-gray-50 rounded-lg">
+            <span class="text-gray-500 block">Acompañamiento Familiar:</span>
+            <span class="text-sm font-bold text-gray-900">\${acompVal}</span>
+          </div>
+        </div>
+
+        <div class="p-3 rounded-lg border border-blue-200 bg-blue-50/60 text-xs">
+          <p class="font-bold text-blue-900 mb-1">📋 Acción Pedagógica Asignada (Anexo 6):</p>
+          <p class="text-blue-800 leading-relaxed">\${accionVal}</p>
+        </div>
+      `;
+
+      modal.classList.remove('hidden');
+    }
+
+    function cerrarFicha() {
+      document.getElementById('modal-ficha').classList.add('hidden');
+    }
+
+    // Simulador de Predicción en Vivo
+    function simularPrediccion() {
+      const rend = parseFloat(document.getElementById('sim-rend-prev').value);
+      const diag = parseFloat(document.getElementById('sim-eval-diag').value);
+      const tareas = parseFloat(document.getElementById('sim-tareas').value);
+      const asis = parseFloat(document.getElementById('sim-asistencia').value);
+      const part = parseInt(document.getElementById('sim-part').value);
+      const acomp = parseInt(document.getElementById('sim-acomp').value);
+
+      document.getElementById('val-rend-prev').innerText = rend.toFixed(1);
+      document.getElementById('val-eval-diag').innerText = diag.toFixed(1);
+      document.getElementById('val-tareas').innerText = tareas + '%';
+      document.getElementById('val-asistencia').innerText = asis + '%';
+
+      // Simulación basada en la regresión logística / árbol ajustado
+      // Si la nota proyectada es baja, la probabilidad de requerir refuerzo sube
+      const notaAprox = (
+        0.35 * rend +
+        0.30 * diag +
+        0.15 * (asis / 5.0) +
+        0.10 * (tareas / 5.0) +
+        0.05 * (part * 6.66) +
+        0.05 * (acomp * 6.66)
+      );
+
+      // Función sigmoide invertida centrada en 13.5 (aprobatorio holgado)
+      const z = (13.2 - notaAprox) * 1.35;
+      let prob = 1 / (1 + Math.exp(-z));
+      prob = Math.max(0.01, Math.min(0.99, prob));
+
+      document.getElementById('sim-probabilidad').innerText = (prob * 100).toFixed(1) + '%';
+
+      const badge = document.getElementById('sim-badge-riesgo');
+      const box = document.getElementById('sim-box-accion');
+      const txt = document.getElementById('sim-texto-accion');
+
+      if (prob >= 0.75) {
+        badge.innerText = 'Riesgo Crítico';
+        badge.className = 'px-4 py-1.5 rounded-full text-sm font-bold bg-red-100 text-red-800';
+        box.className = 'mt-4 p-3 rounded-lg border border-red-200 bg-red-50 text-xs text-red-900';
+        txt.innerText = 'Inclusión prioritaria en tutorías individuales de nivelación, seguimiento permanente y coordinación con el departamento de psicología para la atención integral del estudiante.';
+      } else if (prob >= 0.40) {
+        badge.innerText = 'Riesgo Moderado';
+        badge.className = 'px-4 py-1.5 rounded-full text-sm font-bold bg-amber-100 text-amber-800';
+        box.className = 'mt-4 p-3 rounded-lg border border-amber-200 bg-amber-50 text-xs text-amber-900';
+        txt.innerText = 'Incorporación a talleres de refuerzo académico grupal, monitoreo semanal del desempeño y seguimiento del cumplimiento de tareas.';
+      } else {
+        badge.innerText = 'Sin Riesgo';
+        badge.className = 'px-4 py-1.5 rounded-full text-sm font-bold bg-emerald-100 text-emerald-800';
+        box.className = 'mt-4 p-3 rounded-lg border border-emerald-200 bg-emerald-50 text-xs text-emerald-900';
+        txt.innerText = 'Continuidad en las actividades académicas regulares y participación en estrategias de fortalecimiento y enriquecimiento curricular.';
+      }
+    }
+
+    // Inicializar al cargar
+    window.addEventListener('DOMContentLoaded', () => {
+      renderFeatureImportance();
+      renderTablaEstudiantes();
+      simularPrediccion();
+    });
+  </script>
+</body>
+</html>
